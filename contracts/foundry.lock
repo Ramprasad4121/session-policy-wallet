@@ -1,0 +1,14 @@
+{
+  "lib/modulekit": {
+    "tag": {
+      "name": "v0.5.9",
+      "rev": "b696ccbe1b16a55d8b1a1de192309500af0fae5e"
+    }
+  },
+  "lib/openzeppelin-contracts": {
+    "tag": {
+      "name": "v5.7.0",
+      "rev": "cab19933c33c2ad1d4c7a84864a3601dddfd16f3"
+    }
+  }
+}

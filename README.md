@@ -64,7 +64,7 @@ If a transaction violates either rule, it is rejected.
 | Call to non-allowed contract  | Rejected            |
 
 **Deployed Contract (Monad Testnet):**  
-`0xB30590F0A912B6B8A9F13a9Db9C2AAD3275A311b`
+`0x8d03dfc8516c4Ee0f56B99D5E0000726cE57732A`
 
 ---
  

@@ -10,7 +10,6 @@ contract Deploy is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         PolicyValidator validator = new PolicyValidator();
-
         console.log("PolicyValidator deployed at:", address(validator));
 
         vm.stopBroadcast();

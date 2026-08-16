@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   createPublicClient,
   createWalletClient,
@@ -13,6 +13,12 @@ import {
   type WalletClient,
 } from "viem";
 import { VALIDATOR_ADDRESS, MONAD_TESTNET, POLICY_VALIDATOR_ABI } from "@/lib/contract";
+import {
+  discoverWallets,
+  hasAnyWalletProvider,
+  type EIP1193Provider,
+  type WalletOption,
+} from "@/lib/wallets";
 
 type LogEntry = {
   text: string;
@@ -42,6 +48,10 @@ export default function Home() {
   const [walletClient, setWalletClient] = useState<WalletClient | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [hasProvider, setHasProvider] = useState<boolean | null>(null);
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [walletOptions, setWalletOptions] = useState<WalletOption[]>([]);
+  const [loadingWallets, setLoadingWallets] = useState(false);
+  const activeProviderRef = useRef<EIP1193Provider | null>(null);
 
   // Form state
   const [targetAddress, setTargetAddress] = useState("");
@@ -69,7 +79,9 @@ export default function Home() {
     setLogs((prev) => [...prev, { text, type, timestamp: time }]);
   }, []);
 
-  const setupClients = useCallback((addr: Address, provider: any) => {
+  const setupClients = useCallback((addr: Address, provider: EIP1193Provider) => {
+    activeProviderRef.current = provider;
+
     const pc = createPublicClient({
       chain: monadChain as any,
       transport: http(MONAD_TESTNET.rpcUrls.default.http[0]),
@@ -86,10 +98,9 @@ export default function Home() {
     setWalletClient(wc as any);
   }, []);
 
-  const switchChain = useCallback(async () => {
-    if (typeof window === "undefined" || !(window as any).ethereum) return;
-
-    const provider = (window as any).ethereum;
+  const switchChain = useCallback(async (providerOverride?: EIP1193Provider) => {
+    const provider = providerOverride ?? activeProviderRef.current;
+    if (!provider) return;
 
     try {
       await provider.request({
@@ -141,21 +152,27 @@ export default function Home() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const provider = (window as any).ethereum;
-    setHasProvider(!!provider);
+    setHasProvider(hasAnyWalletProvider());
 
-    if (!provider) return;
+    const ethereum = (window as unknown as { ethereum?: EIP1193Provider }).ethereum;
+    if (!ethereum) return;
+
+    const provider =
+      ethereum.providers && ethereum.providers.length === 1
+        ? ethereum.providers[0]
+        : ethereum;
 
     provider
       .request({ method: "eth_chainId" })
-      .then((cId: string) => setChainId(parseInt(cId, 16)))
+      .then((cId) => setChainId(parseInt(cId as string, 16)))
       .catch(() => {});
 
     provider
       .request({ method: "eth_accounts" })
-      .then((accounts: string[]) => {
-        if (accounts && accounts.length > 0) {
-          const addr = accounts[0] as Address;
+      .then((accounts) => {
+        const list = accounts as string[];
+        if (list && list.length > 0) {
+          const addr = list[0] as Address;
           setupClients(addr, provider);
           log(
             `Auto-connected: ${addr.slice(0, 6)}...${addr.slice(-4)}`,
@@ -165,14 +182,17 @@ export default function Home() {
       })
       .catch(() => {});
 
-    const handleAccountsChanged = (accounts: string[]) => {
-      if (!accounts || accounts.length === 0) {
+    const handleAccountsChanged = (accounts: unknown) => {
+      const list = accounts as string[];
+      const active = activeProviderRef.current ?? provider;
+      if (!list || list.length === 0) {
         setAccount(null);
         setWalletClient(null);
+        activeProviderRef.current = null;
         log("Wallet disconnected", "info");
       } else {
-        const addr = accounts[0] as Address;
-        setupClients(addr, provider);
+        const addr = list[0] as Address;
+        setupClients(addr, active);
         log(
           `Switched account: ${addr.slice(0, 6)}...${addr.slice(-4)}`,
           "info"
@@ -180,9 +200,9 @@ export default function Home() {
       }
     };
 
-    const handleChainChanged = (cId: string) => {
-      setChainId(parseInt(cId, 16));
-      log(`Chain changed to ${parseInt(cId, 16)}`, "info");
+    const handleChainChanged = (cId: unknown) => {
+      setChainId(parseInt(cId as string, 16));
+      log(`Chain changed to ${parseInt(cId as string, 16)}`, "info");
     };
 
     provider.on?.("accountsChanged", handleAccountsChanged);
@@ -194,79 +214,92 @@ export default function Home() {
     };
   }, [setupClients, log]);
 
-  // Connect Wallet
-  const connectWallet = useCallback(async () => {
-    if (typeof window === "undefined") return;
+  const connectWithProvider = useCallback(
+    async (wallet: WalletOption) => {
+      if (!wallet.provider) {
+        if (wallet.installUrl) {
+          window.open(wallet.installUrl, "_blank", "noopener,noreferrer");
+          log(`Opening ${wallet.name} install page`, "info");
+        }
+        return;
+      }
 
-    let ethereum = (window as any).ethereum;
+      const ethereum = wallet.provider;
+      setConnecting(true);
+      setShowWalletModal(false);
+      log(`Connecting via ${wallet.name}...`, "info");
 
-    if (!ethereum) {
-      log("No Web3 wallet found. Please install MetaMask or Rabby.", "error");
-      return;
-    }
+      try {
+        const tempClient = createWalletClient({
+          transport: custom(ethereum),
+        });
 
-    // Handle multiple injected providers (e.g. Coinbase + MetaMask)
-    if (ethereum.providers && ethereum.providers.length > 0) {
-      const metaMaskProvider = ethereum.providers.find((p: any) => p.isMetaMask);
-      ethereum = metaMaskProvider ?? ethereum.providers[0];
-    }
+        const accounts = await tempClient.requestAddresses();
 
-    setConnecting(true);
-    log("Requesting wallet connection...", "info");
+        if (!accounts || accounts.length === 0) {
+          throw new Error("No accounts returned by wallet");
+        }
+
+        const addr = accounts[0] as Address;
+        setupClients(addr, ethereum);
+        log(`Connected via ${wallet.name}: ${addr}`, "success");
+        switchChain(ethereum).catch(() => {});
+      } catch (e: any) {
+        if (
+          e?.message?.toLowerCase?.().includes("not connected") ||
+          e?.code === 4900
+        ) {
+          try {
+            log("Attempting legacy connection...", "info");
+            const legacyAccounts = await (ethereum as EIP1193Provider & {
+              enable?: () => Promise<string[]>;
+            }).enable?.();
+            if (legacyAccounts && legacyAccounts.length > 0) {
+              const addr = legacyAccounts[0] as Address;
+              setupClients(addr, ethereum);
+              log(`Connected via ${wallet.name}: ${addr}`, "success");
+              switchChain(ethereum).catch(() => {});
+              return;
+            }
+          } catch {
+            // Fall through to user-facing error below.
+          }
+        }
+
+        if (e?.code === 4001) {
+          log("Connection rejected by user", "error");
+        } else if (
+          e?.message?.toLowerCase?.().includes("not connected") ||
+          e?.message?.toLowerCase?.().includes("locked")
+        ) {
+          log(
+            `Wallet is locked. Unlock ${wallet.name}, reload, and try again.`,
+            "error"
+          );
+        } else {
+          log(`Connection failed: ${e?.message || String(e)}`, "error");
+        }
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [setupClients, switchChain, log]
+  );
+
+  const openWalletPicker = useCallback(async () => {
+    setLoadingWallets(true);
+    setShowWalletModal(true);
 
     try {
-      const tempClient = createWalletClient({
-        transport: custom(ethereum),
-      });
-
-      const accounts = await tempClient.requestAddresses();
-
-      if (!accounts || accounts.length === 0) {
-        throw new Error("No accounts returned by wallet");
-      }
-
-      const addr = accounts[0] as Address;
-      setupClients(addr, ethereum);
-      log(`Connected: ${addr}`, "success");
-
-      // Non-blocking chain switch
-      switchChain().catch(() => {});
-      
-    } catch (e: any) {
-      // Fallback for older extensions
-      if (e?.message?.toLowerCase?.().includes("not connected") || e?.code === 4900) {
-        try {
-          log("Attempting legacy connection...", "info");
-          const legacyAccounts = await ethereum.enable();
-          if (legacyAccounts && legacyAccounts.length > 0) {
-            const addr = legacyAccounts[0] as Address;
-            setupClients(addr, ethereum);
-            log(`Connected: ${addr}`, "success");
-            switchChain().catch(() => {});
-            return;
-          }
-        } catch {
-          // Fall through to user-facing error below.
-        }
-      }
-
-      if (e?.code === 4001) {
-        log("Connection rejected by user", "error");
-      } else if (
-        e?.message?.toLowerCase?.().includes("not connected") ||
-        e?.message?.toLowerCase?.().includes("locked")
-      ) {
-        log(
-          "Wallet is locked or uninitialized. Please unlock MetaMask, reload the page, and try again.",
-          "error"
-        );
-      } else {
-        log(`Connection failed: ${e?.message || String(e)}`, "error");
-      }
+      const wallets = await discoverWallets();
+      setWalletOptions(wallets);
+    } catch {
+      setWalletOptions([]);
+      log("Could not detect wallet extensions", "error");
     } finally {
-      setConnecting(false);
+      setLoadingWallets(false);
     }
-  }, [setupClients, switchChain, log]);
+  }, [log]);
 
   // Refresh session info
   const refreshSession = useCallback(async () => {
@@ -551,6 +584,7 @@ export default function Home() {
                 onClick={() => {
                   setAccount(null);
                   setWalletClient(null);
+                  activeProviderRef.current = null;
                   log("Disconnected", "info");
                 }}
                 title="Click to disconnect"
@@ -561,7 +595,7 @@ export default function Home() {
           ) : (
             <button
               className="btn-connect"
-              onClick={connectWallet}
+              onClick={openWalletPicker}
               disabled={connecting}
             >
               {connecting ? "CONNECTING..." : "CONNECT WALLET"}
@@ -580,8 +614,79 @@ export default function Home() {
             fontSize: "11px",
           }}
         >
-          [NOTICE] No Web3 wallet extension detected. Please install MetaMask
-          or Rabby.
+          [NOTICE] No Web3 wallet extension detected. Click CONNECT WALLET to
+          see install options for MetaMask, Rabby, and others.
+        </div>
+      )}
+
+      {showWalletModal && (
+        <div
+          className="wallet-modal-backdrop"
+          onClick={() => !connecting && setShowWalletModal(false)}
+          role="presentation"
+        >
+          <div
+            className="wallet-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wallet-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="wallet-modal-header">
+              <div className="wallet-modal-title" id="wallet-modal-title">
+                Connect a Wallet
+              </div>
+              <button
+                type="button"
+                className="wallet-modal-close"
+                onClick={() => setShowWalletModal(false)}
+                aria-label="Close wallet picker"
+              >
+                ×
+              </button>
+            </div>
+            <div className="wallet-modal-body">
+              <div className="wallet-modal-subtitle">
+                Choose which wallet to connect. Only installed extensions can
+                connect; others link to install pages.
+              </div>
+              {loadingWallets ? (
+                <div className="wallet-modal-subtitle">Detecting wallets...</div>
+              ) : walletOptions.length === 0 ? (
+                <div className="wallet-modal-subtitle">
+                  No wallets found. Install MetaMask or Rabby, then reload.
+                </div>
+              ) : (
+                walletOptions.map((wallet) => (
+                  <button
+                    key={wallet.id}
+                    type="button"
+                    className="wallet-option"
+                    onClick={() => connectWithProvider(wallet)}
+                    disabled={connecting}
+                  >
+                    <div className="wallet-option-icon">
+                      {wallet.icon ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={wallet.icon} alt="" />
+                      ) : (
+                        wallet.name.slice(0, 2).toUpperCase()
+                      )}
+                    </div>
+                    <div className="wallet-option-info">
+                      <div className="wallet-option-name">{wallet.name}</div>
+                      <div className="wallet-option-status">
+                        {wallet.installed ? "Detected" : "Not installed"}
+                      </div>
+                    </div>
+                    <div className="wallet-option-action">
+                      {wallet.installed ? "Connect" : "Install"}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
 

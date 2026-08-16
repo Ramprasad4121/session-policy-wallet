@@ -146,6 +146,26 @@ npm install
 PRIVATE_KEY=0xyourkey npx tsx agent-simulation.ts
 ```
 
+### 6. Frontend
+```bash 
+cd frontend
+npm install
+npm run dev
+```
+Open http://localhost:3000
+
+#### Frontend Usage
+
+Connect wallet
+
+Click ALLOW TARGET (adds a contract to the allowlist)
+
+Click REGISTER SESSION (creates a restricted session key)
+
+Run EXECUTE VALID ACTION → should return ALLOWED
+
+Run EXECUTE MALICIOUS ACTION → should return REJECTED
+
 ---
 
 ## Roadmap

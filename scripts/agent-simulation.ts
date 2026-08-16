@@ -1,5 +1,5 @@
 import { createPublicClient, createWalletClient, http, parseEther, formatEther } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 
 const PRIVATE_KEY = process.env.PRIVATE_KEY as `0x${string}`;
 const VALIDATOR_ADDRESS = (process.env.VALIDATOR_ADDRESS || "0x8d03dfc8516c4Ee0f56B99D5E0000726cE57732A") as `0x${string}`;
@@ -8,8 +8,9 @@ const RPC_URL = "https://testnet-rpc.monad.xyz";
 const ALLOWED_TARGET = "0x1234567890123456789012345678901234567890" as `0x${string}`;
 const BLOCKED_TARGET = "0x9999999999999999999999999999999999999999" as `0x${string}`;
 
-// Demo session key
-const SESSION_KEY = "0x1111111111111111111111111111111111111111" as `0x${string}`;
+// Generate a fresh session key every run
+const sessionAccount = privateKeyToAccount(generatePrivateKey());
+const SESSION_KEY = sessionAccount.address;
 const abi = [
   {
     name: "setPolicy",

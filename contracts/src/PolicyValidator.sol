@@ -19,17 +19,17 @@ contract PolicyValidator {
     // ============ Structs ============
 
     struct Policy {
-        uint256 maxNativeSpend;   // Maximum native tokens allowed
-        uint256 spent;            // Amount already spent
+        uint256 maxNativeSpend; // Maximum native tokens allowed
+        uint256 spent; // Amount already spent
         bool enabled;
     }
 
     struct Session {
-        address key;              // Session key address
+        address key; // Session key address
         uint256 maxNativeSpend;
         uint256 spent;
         bool active;
-        uint48 validUntil;        // Optional expiry (0 = no expiry)
+        uint48 validUntil; // Optional expiry (0 = no expiry)
     }
 
     // ============ Storage ============
@@ -51,7 +51,9 @@ contract PolicyValidator {
     event PolicySet(address indexed account, uint256 maxNativeSpend);
     event PolicyDisabled(address indexed account);
     event TargetAllowed(address indexed account, address indexed target, bool allowed);
-    event SessionCreated(address indexed account, address indexed sessionKey, uint256 maxNativeSpend, uint48 validUntil);
+    event SessionCreated(
+        address indexed account, address indexed sessionKey, uint256 maxNativeSpend, uint48 validUntil
+    );
     event SessionRevoked(address indexed account, address indexed sessionKey);
     event SpendRecorded(address indexed account, address indexed sessionKey, uint256 amount, uint256 remainingSpend);
 
@@ -85,11 +87,7 @@ contract PolicyValidator {
 
     function setPolicy(uint256 maxNativeSpend) external {
         if (maxNativeSpend == 0) revert InvalidAmount();
-        policies[msg.sender] = Policy({
-            maxNativeSpend: maxNativeSpend,
-            spent: 0,
-            enabled: true
-        });
+        policies[msg.sender] = Policy({maxNativeSpend: maxNativeSpend, spent: 0, enabled: true});
         emit PolicySet(msg.sender, maxNativeSpend);
     }
 
@@ -112,22 +110,13 @@ contract PolicyValidator {
      * @param maxNativeSpend Maximum this session can spend
      * @param validUntil Unix timestamp when session expires (0 = no expiry)
      */
-    function createSession(
-        address sessionKey,
-        uint256 maxNativeSpend,
-        uint48 validUntil
-    ) external {
+    function createSession(address sessionKey, uint256 maxNativeSpend, uint48 validUntil) external {
         if (sessionKey == address(0)) revert ZeroAddress();
         if (maxNativeSpend == 0) revert InvalidAmount();
         if (sessions[msg.sender][sessionKey].active) revert SessionAlreadyExists(msg.sender, sessionKey);
 
-        sessions[msg.sender][sessionKey] = Session({
-            key: sessionKey,
-            maxNativeSpend: maxNativeSpend,
-            spent: 0,
-            active: true,
-            validUntil: validUntil
-        });
+        sessions[msg.sender][sessionKey] =
+            Session({key: sessionKey, maxNativeSpend: maxNativeSpend, spent: 0, active: true, validUntil: validUntil});
 
         sessionKeys[msg.sender].push(sessionKey);
 
@@ -147,11 +136,7 @@ contract PolicyValidator {
      * @notice Validate an action for an account (owner policy)
      * @dev Returns false on failure — use for soft checks
      */
-    function validate(
-        address account,
-        address target,
-        uint256 value
-    ) external view returns (bool) {
+    function validate(address account, address target, uint256 value) external view returns (bool) {
         Policy memory policy = policies[account];
         if (!policy.enabled) return false;
         if (policy.spent + value > policy.maxNativeSpend) return false;
@@ -164,12 +149,11 @@ contract PolicyValidator {
      * @dev Returns false on failure — use for soft checks.
      *      For descriptive revert reasons, use validateSessionStrict.
      */
-    function validateSession(
-        address account,
-        address sessionKey,
-        address target,
-        uint256 value
-    ) external view returns (bool) {
+    function validateSession(address account, address sessionKey, address target, uint256 value)
+        external
+        view
+        returns (bool)
+    {
         Session memory s = sessions[account][sessionKey];
 
         if (!s.active) return false;
@@ -185,12 +169,7 @@ contract PolicyValidator {
      * @dev Use this when you want callers to know exactly why validation failed.
      *      Runs the same checks as validateSession but reverts instead of returning false.
      */
-    function validateSessionStrict(
-        address account,
-        address sessionKey,
-        address target,
-        uint256 value
-    ) external view {
+    function validateSessionStrict(address account, address sessionKey, address target, uint256 value) external view {
         Session memory s = sessions[account][sessionKey];
 
         if (!s.active) revert SessionNotActive(account, sessionKey);

@@ -79,8 +79,7 @@ contract PolicyValidatorTest is Test {
         // Now try to spend more than the remaining 0.02 — must revert with context
         vm.expectRevert(
             abi.encodeWithSelector(
-                PolicyValidator.SpendLimitExceeded.selector,
-                owner, sessionKey, 0.03 ether, 0.02 ether
+                PolicyValidator.SpendLimitExceeded.selector, owner, sessionKey, 0.03 ether, 0.02 ether
             )
         );
         validator.recordSessionSpend(owner, sessionKey, 0.03 ether);
@@ -108,8 +107,7 @@ contract PolicyValidatorTest is Test {
         // Any further spend — even 1 wei — must revert with context
         vm.expectRevert(
             abi.encodeWithSelector(
-                PolicyValidator.SpendLimitExceeded.selector,
-                owner, sessionKey, uint256(1), uint256(0)
+                PolicyValidator.SpendLimitExceeded.selector, owner, sessionKey, uint256(1), uint256(0)
             )
         );
         validator.recordSessionSpend(owner, sessionKey, 1);
@@ -124,12 +122,7 @@ contract PolicyValidatorTest is Test {
         validator.revokeSession(sessionKey);
 
         // Recording spend on a revoked session must revert with context
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PolicyValidator.SessionNotActive.selector,
-                owner, sessionKey
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PolicyValidator.SessionNotActive.selector, owner, sessionKey));
         validator.recordSessionSpend(owner, sessionKey, 0.01 ether);
     }
 
@@ -209,12 +202,7 @@ contract PolicyValidatorTest is Test {
 
     function test_ValidateStrict_RevertsSessionNotActive() public {
         address unknownKey = address(0xDEAD);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PolicyValidator.SessionNotActive.selector,
-                owner, unknownKey
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PolicyValidator.SessionNotActive.selector, owner, unknownKey));
         validator.validateSessionStrict(owner, unknownKey, allowedTarget, 0.01 ether);
     }
 
@@ -226,8 +214,7 @@ contract PolicyValidatorTest is Test {
         vm.warp(2001);
         vm.expectRevert(
             abi.encodeWithSelector(
-                PolicyValidator.SessionExpired.selector,
-                owner, expiringKey, uint48(2000), uint256(2001)
+                PolicyValidator.SessionExpired.selector, owner, expiringKey, uint48(2000), uint256(2001)
             )
         );
         validator.validateSessionStrict(owner, expiringKey, allowedTarget, 0.01 ether);
@@ -235,21 +222,13 @@ contract PolicyValidatorTest is Test {
 
     function test_ValidateStrict_RevertsSpendLimitExceeded() public {
         vm.expectRevert(
-            abi.encodeWithSelector(
-                PolicyValidator.SpendLimitExceeded.selector,
-                owner, sessionKey, 0.2 ether, 0.1 ether
-            )
+            abi.encodeWithSelector(PolicyValidator.SpendLimitExceeded.selector, owner, sessionKey, 0.2 ether, 0.1 ether)
         );
         validator.validateSessionStrict(owner, sessionKey, allowedTarget, 0.2 ether);
     }
 
     function test_ValidateStrict_RevertsTargetNotAllowed() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PolicyValidator.TargetNotAllowed.selector,
-                owner, blockedTarget
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PolicyValidator.TargetNotAllowed.selector, owner, blockedTarget));
         validator.validateSessionStrict(owner, sessionKey, blockedTarget, 0.01 ether);
     }
 
@@ -296,8 +275,7 @@ contract PolicyValidatorTest is Test {
         vm.warp(2001);
         vm.expectRevert(
             abi.encodeWithSelector(
-                PolicyValidator.SessionExpired.selector,
-                owner, expiringKey, uint48(2000), uint256(2001)
+                PolicyValidator.SessionExpired.selector, owner, expiringKey, uint48(2000), uint256(2001)
             )
         );
         validator.recordSessionSpend(owner, expiringKey, 0.01 ether);
@@ -305,12 +283,7 @@ contract PolicyValidatorTest is Test {
 
     function test_CreateSession_RevertsSessionAlreadyExists() public {
         // sessionKey was already created in setUp — creating again must revert
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PolicyValidator.SessionAlreadyExists.selector,
-                owner, sessionKey
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PolicyValidator.SessionAlreadyExists.selector, owner, sessionKey));
         vm.prank(owner);
         validator.createSession(sessionKey, 0.05 ether, 0);
     }

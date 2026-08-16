@@ -44,7 +44,6 @@ If a transaction violates either rule, it is rejected.
 `0xB30590F0A912B6B8A9F13a9Db9C2AAD3275A311b`
 
 ---
-### Demo Screenshot
  
 ### Demo Screenshot
 

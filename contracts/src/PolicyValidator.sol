@@ -49,21 +49,37 @@ contract PolicyValidator {
     // ============ Events ============
 
     event PolicySet(address indexed account, uint256 maxNativeSpend);
+    event PolicyDisabled(address indexed account);
     event TargetAllowed(address indexed account, address indexed target, bool allowed);
     event SessionCreated(address indexed account, address indexed sessionKey, uint256 maxNativeSpend, uint48 validUntil);
     event SessionRevoked(address indexed account, address indexed sessionKey);
-    event SpendRecorded(address indexed account, address indexed sessionKey, uint256 amount);
+    event SpendRecorded(address indexed account, address indexed sessionKey, uint256 amount, uint256 remainingSpend);
 
     // ============ Errors ============
 
-    error PolicyNotEnabled();
-    error SessionNotActive();
-    error SessionExpired();
-    error SpendLimitExceeded();
-    error TargetNotAllowed();
+    /// @notice The owner-level policy is not enabled for this account
+    error PolicyNotEnabled(address account);
+
+    /// @notice The session key is not active (never created, or already revoked)
+    error SessionNotActive(address account, address sessionKey);
+
+    /// @notice The session has passed its validUntil timestamp
+    error SessionExpired(address account, address sessionKey, uint48 validUntil, uint256 currentTimestamp);
+
+    /// @notice The requested spend exceeds the remaining budget
+    error SpendLimitExceeded(address account, address sessionKey, uint256 requested, uint256 remaining);
+
+    /// @notice The target contract is not on the allowlist
+    error TargetNotAllowed(address account, address target);
+
+    /// @notice A zero address was passed where a real address is required
     error ZeroAddress();
+
+    /// @notice An invalid (zero) amount was provided
     error InvalidAmount();
-    error SessionAlreadyExists();
+
+    /// @notice A session already exists for this key — revoke it first
+    error SessionAlreadyExists(address account, address sessionKey);
 
     // ============ Owner Policy Management ============
 
@@ -85,6 +101,7 @@ contract PolicyValidator {
 
     function disablePolicy() external {
         policies[msg.sender].enabled = false;
+        emit PolicyDisabled(msg.sender);
     }
 
     // ============ Session Key Management ============
@@ -102,7 +119,7 @@ contract PolicyValidator {
     ) external {
         if (sessionKey == address(0)) revert ZeroAddress();
         if (maxNativeSpend == 0) revert InvalidAmount();
-        if (sessions[msg.sender][sessionKey].active) revert SessionAlreadyExists();
+        if (sessions[msg.sender][sessionKey].active) revert SessionAlreadyExists(msg.sender, sessionKey);
 
         sessions[msg.sender][sessionKey] = Session({
             key: sessionKey,
@@ -119,7 +136,7 @@ contract PolicyValidator {
 
     function revokeSession(address sessionKey) external {
         Session storage s = sessions[msg.sender][sessionKey];
-        if (!s.active) revert SessionNotActive();
+        if (!s.active) revert SessionNotActive(msg.sender, sessionKey);
         s.active = false;
         emit SessionRevoked(msg.sender, sessionKey);
     }
@@ -128,6 +145,7 @@ contract PolicyValidator {
 
     /**
      * @notice Validate an action for an account (owner policy)
+     * @dev Returns false on failure — use for soft checks
      */
     function validate(
         address account,
@@ -143,7 +161,8 @@ contract PolicyValidator {
 
     /**
      * @notice Validate an action for a session key
-     * @dev This is the main function agents should use
+     * @dev Returns false on failure — use for soft checks.
+     *      For descriptive revert reasons, use validateSessionStrict.
      */
     function validateSession(
         address account,
@@ -162,16 +181,44 @@ contract PolicyValidator {
     }
 
     /**
+     * @notice Validate a session action — reverts with a descriptive error on failure
+     * @dev Use this when you want callers to know exactly why validation failed.
+     *      Runs the same checks as validateSession but reverts instead of returning false.
+     */
+    function validateSessionStrict(
+        address account,
+        address sessionKey,
+        address target,
+        uint256 value
+    ) external view {
+        Session memory s = sessions[account][sessionKey];
+
+        if (!s.active) revert SessionNotActive(account, sessionKey);
+        if (s.validUntil != 0 && block.timestamp > s.validUntil) {
+            revert SessionExpired(account, sessionKey, s.validUntil, block.timestamp);
+        }
+        if (s.spent + value > s.maxNativeSpend) {
+            revert SpendLimitExceeded(account, sessionKey, value, s.maxNativeSpend - s.spent);
+        }
+        if (!allowedTargets[account][target]) revert TargetNotAllowed(account, target);
+    }
+
+    /**
      * @notice Record a successful spend against a session
      * @dev Should be called after a successful action
      */
     function recordSessionSpend(address account, address sessionKey, uint256 value) external {
         Session storage s = sessions[account][sessionKey];
-        if (!s.active) revert SessionNotActive();
-        if (s.spent + value > s.maxNativeSpend) revert SpendLimitExceeded();
+        if (!s.active) revert SessionNotActive(account, sessionKey);
+        if (s.validUntil != 0 && block.timestamp > s.validUntil) {
+            revert SessionExpired(account, sessionKey, s.validUntil, block.timestamp);
+        }
+        if (s.spent + value > s.maxNativeSpend) {
+            revert SpendLimitExceeded(account, sessionKey, value, s.maxNativeSpend - s.spent);
+        }
 
         s.spent += value;
-        emit SpendRecorded(account, sessionKey, value);
+        emit SpendRecorded(account, sessionKey, value, s.maxNativeSpend - s.spent);
     }
 
     // ============ View Helpers ============

@@ -63,6 +63,17 @@ const abi = [
     outputs: [{ name: "success", type: "bool" }],
   },
   {
+    name: "recordSessionSpend",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "account", type: "address" },
+      { name: "sessionKey", type: "address" },
+      { name: "value", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
     name: "getSessionRemainingSpend",
     type: "function",
     stateMutability: "view",
@@ -91,6 +102,17 @@ async function main() {
     console.log("Waiting for confirmation...");
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     console.log("Confirmed in block:", receipt.blockNumber.toString());
+  }
+
+  async function showRemaining(label: string) {
+    const remaining = await publicClient.readContract({
+      address: VALIDATOR_ADDRESS,
+      abi,
+      functionName: "getSessionRemainingSpend",
+      args: [account.address, SESSION_KEY],
+    });
+    console.log(`  → Remaining spend (${label}): ${formatEther(remaining)} MON`);
+    return remaining;
   }
 
   // 1. Set owner policy
@@ -126,43 +148,77 @@ async function main() {
   });
   await sendAndWait(p3, "createSession");
 
-  // 4. Valid session action
+  // Show initial remaining spend
+  await showRemaining("after creation");
+
+  // 4. Valid session action — validate, record spend, check remaining
   console.log("\n[4] Testing VALID session action (0.01 MON)...");
-  const valid = await publicClient.readContract({
+  const valid1 = await publicClient.readContract({
     address: VALIDATOR_ADDRESS,
     abi,
     functionName: "validateSession",
     args: [account.address, SESSION_KEY, ALLOWED_TARGET, parseEther("0.01")],
   });
-  console.log("Result:", valid ? "ALLOWED" : "REJECTED");
+  console.log("  Validation:", valid1 ? "ALLOWED ✓" : "REJECTED ✗");
 
-  // 5. Over spend
-  console.log("\n[5] Testing MALICIOUS action (0.05 MON - over session limit)...");
+  if (valid1) {
+    console.log("  Recording spend of 0.01 MON...");
+    const rs1 = await walletClient.writeContract({
+      address: VALIDATOR_ADDRESS,
+      abi,
+      functionName: "recordSessionSpend",
+      args: [account.address, SESSION_KEY, parseEther("0.01")],
+      chain: null,
+    });
+    await sendAndWait(rs1, "recordSessionSpend");
+    await showRemaining("after 0.01 MON spend");
+  }
+
+  // 5. Second valid action — validate, record, check remaining again
+  console.log("\n[5] Testing second VALID action (0.01 MON)...");
+  const valid2 = await publicClient.readContract({
+    address: VALIDATOR_ADDRESS,
+    abi,
+    functionName: "validateSession",
+    args: [account.address, SESSION_KEY, ALLOWED_TARGET, parseEther("0.01")],
+  });
+  console.log("  Validation:", valid2 ? "ALLOWED ✓" : "REJECTED ✗");
+
+  if (valid2) {
+    console.log("  Recording spend of 0.01 MON...");
+    const rs2 = await walletClient.writeContract({
+      address: VALIDATOR_ADDRESS,
+      abi,
+      functionName: "recordSessionSpend",
+      args: [account.address, SESSION_KEY, parseEther("0.01")],
+      chain: null,
+    });
+    await sendAndWait(rs2, "recordSessionSpend");
+    await showRemaining("after 0.02 MON total spent");
+  }
+
+  // 6. Over-spend: try to spend more than the remaining limit
+  console.log("\n[6] Testing MALICIOUS action (0.05 MON — exceeds remaining)...");
   const over = await publicClient.readContract({
     address: VALIDATOR_ADDRESS,
     abi,
     functionName: "validateSession",
     args: [account.address, SESSION_KEY, ALLOWED_TARGET, parseEther("0.05")],
   });
-  console.log("Result:", over ? "ALLOWED" : "REJECTED (Spend Limit)");
+  console.log("  Result:", over ? "ALLOWED ✓" : "REJECTED ✗ (Spend Limit Exceeded)");
 
-  // 6. Blocked target
-  console.log("\n[6] Testing MALICIOUS action (blocked target)...");
+  // 7. Blocked target
+  console.log("\n[7] Testing MALICIOUS action (blocked target)...");
   const blocked = await publicClient.readContract({
     address: VALIDATOR_ADDRESS,
     abi,
     functionName: "validateSession",
     args: [account.address, SESSION_KEY, BLOCKED_TARGET, parseEther("0.01")],
   });
-  console.log("Result:", blocked ? "ALLOWED" : "REJECTED (Target Not Allowed)");
+  console.log("  Result:", blocked ? "ALLOWED ✓" : "REJECTED ✗ (Target Not Allowed)");
 
-  const remaining = await publicClient.readContract({
-    address: VALIDATOR_ADDRESS,
-    abi,
-    functionName: "getSessionRemainingSpend",
-    args: [account.address, SESSION_KEY],
-  });
-  console.log("\nSession remaining spend:", formatEther(remaining), "MON");
+  // Final remaining spend
+  await showRemaining("final");
   console.log("\n=== Demo Complete ===\n");
 }
 

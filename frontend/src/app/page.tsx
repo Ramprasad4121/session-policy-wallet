@@ -73,6 +73,72 @@ export default function Home() {
   const [maliciousResult, setMaliciousResult] = useState<ValidationResult>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState<string | null>(null);
+  
+  // UI Helpers
+  const [helpOpen, setHelpOpen] = useState<Record<string, boolean>>({});
+  const toggleHelp = (key: string) => setHelpOpen((p) => ({ ...p, [key]: !p[key] }));
+
+  const renderHelp = (key: string, text: string, alignRight = false) => {
+    const isOpen = helpOpen[key];
+    return (
+      <div
+        style={{
+          marginTop: "4px",
+          fontFamily: "var(--mono)",
+          fontSize: "10px",
+          textAlign: alignRight ? "right" : "left",
+        }}
+      >
+        {!alignRight && (
+          <button
+            onClick={() => toggleHelp(key)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              padding: 0,
+              fontFamily: "inherit",
+              fontSize: "inherit",
+            }}
+            title="Toggle details"
+          >
+            {isOpen ? "[-]" : "[?]"}
+          </button>
+        )}
+        {isOpen && (
+          <span
+            style={{
+              color: "var(--text-dim)",
+              marginLeft: alignRight ? 0 : "6px",
+              marginRight: alignRight ? "6px" : 0,
+              lineHeight: "1.4",
+              fontFamily: "var(--sans)",
+            }}
+          >
+            {text}
+          </span>
+        )}
+        {alignRight && (
+          <button
+            onClick={() => toggleHelp(key)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              padding: 0,
+              fontFamily: "inherit",
+              fontSize: "inherit",
+            }}
+            title="Toggle details"
+          >
+            {isOpen ? "[-]" : "[?]"}
+          </button>
+        )}
+      </div>
+    );
+  };
 
   const log = useCallback((text: string, type: LogEntry["type"] = "info") => {
     const time = new Date().toLocaleTimeString();
@@ -697,19 +763,22 @@ export default function Home() {
             <div className="section-title">
               {formatSection(policySection)}. Policy Configuration
             </div>
-            <button
-              onClick={handleFillDemo}
-              style={{
-                background: "transparent",
-                border: "none",
-                fontFamily: "var(--mono)",
-                fontSize: "11px",
-                textDecoration: "underline",
-                cursor: "pointer",
-              }}
-            >
-              [AUTO-FILL DEMO INPUTS]
-            </button>
+            <div style={{ textAlign: "right" }}>
+              <button
+                onClick={handleFillDemo}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  fontFamily: "var(--mono)",
+                  fontSize: "11px",
+                  textDecoration: "underline",
+                  cursor: "pointer",
+                }}
+              >
+                [AUTO-FILL DEMO INPUTS]
+              </button>
+              {renderHelp("demo", "Fills the form with example values for quick testing.", true)}
+            </div>
           </div>
 
           <div className="grid-2">
@@ -734,6 +803,7 @@ export default function Home() {
               >
                 {loading === "target" ? "SETTING ON-CHAIN..." : "ALLOW TARGET"}
               </button>
+              {renderHelp("target", "Adds this contract to the allowlist. Session keys can only interact with allowed contracts.")}
             </div>
 
             <div className="box">
@@ -790,6 +860,7 @@ export default function Home() {
                   ? "BROADCASTING..."
                   : "REGISTER SESSION"}
               </button>
+              {renderHelp("session", "Creates a restricted session key with a spend limit and optional expiry. Give this key to an agent.")}
             </div>
           </div>
         </section>
@@ -868,24 +939,30 @@ export default function Home() {
             </div>
 
             <div className="grid-2">
-              <button
-                className="btn"
-                onClick={handleValidAction}
-                disabled={loading === "valid"}
-              >
-                {loading === "valid"
-                  ? "VALIDATING..."
-                  : "[+] EXECUTE VALID ACTION"}
-              </button>
-              <button
-                className="btn"
-                onClick={handleMaliciousAction}
-                disabled={loading === "malicious"}
-              >
-                {loading === "malicious"
-                  ? "VALIDATING..."
-                  : "[!] EXECUTE MALICIOUS ACTION"}
-              </button>
+              <div>
+                <button
+                  className="btn"
+                  onClick={handleValidAction}
+                  disabled={loading === "valid"}
+                >
+                  {loading === "valid"
+                    ? "VALIDATING..."
+                    : "[+] EXECUTE VALID ACTION"}
+                </button>
+                {renderHelp("valid", "Simulates a normal allowed action (small spend to an approved contract). Should return ALLOWED.")}
+              </div>
+              <div>
+                <button
+                  className="btn"
+                  onClick={handleMaliciousAction}
+                  disabled={loading === "malicious"}
+                >
+                  {loading === "malicious"
+                    ? "VALIDATING..."
+                    : "[!] EXECUTE MALICIOUS ACTION"}
+                </button>
+                {renderHelp("malicious", "Simulates an attack: large spend + unapproved contract. Should return REJECTED.")}
+              </div>
             </div>
 
             {validResult && (

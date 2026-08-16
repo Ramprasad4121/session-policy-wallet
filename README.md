@@ -1,8 +1,26 @@
-# Session Policy Wallet
 
-**Restricted session keys with on-chain enforceable policies for humans and AI agents.**
+<p align="center">
+  <img src="docs/screenshots/logo.jpeg" alt="Session Policy Wallet Logo" width="280"/>
+</p>
 
-Session Policy Wallet lets you grant temporary keys that can only spend a limited amount and can only interact with approved contracts. Any action outside the defined policy is automatically rejected on-chain.
+<h1 align="center">Session Policy Wallet</h1>
+
+<p align="center">
+  <strong>Restricted session keys with on-chain enforceable policies for humans and AI agents.</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Solidity-363636?style=for-the-badge&logo=solidity&logoColor=white" alt="Solidity"/>
+  <img src="https://img.shields.io/badge/Monad-6B46C1?style=for-the-badge&logo=ethereum&logoColor=white" alt="Monad"/>
+  <img src="https://img.shields.io/badge/Foundry-000000?style=for-the-badge&logo=ethereum&logoColor=white" alt="Foundry"/>
+  <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License"/>
+</p>
+
+<p align="center">
+  Session Policy Wallet lets you grant temporary keys that can only spend a limited amount and can only interact with approved contracts. Any action outside the defined policy is automatically rejected on-chain. Built as an MVP during Monad Blitz Bangalore.
+</p>
+
+---
 
 ---
 > [!IMPORTANT]  

@@ -48,7 +48,7 @@ If a transaction violates either rule, it is rejected.
  
 ### Demo Screenshot
 
-[View Agent Simulation Demo](docs/screenshot/agent-simulation-demo.png)
+[View Agent Simulation Demo](docs/screenshots/agent-simulation-demo.png)
 
 ---
 

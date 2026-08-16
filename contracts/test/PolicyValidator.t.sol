@@ -128,4 +128,65 @@ contract PolicyValidatorTest is Test {
         bool ok = validator.validateSession(owner, sessionKey, allowedTarget, 0.01 ether);
         assertFalse(ok);
     }
+
+    // ---- Step 2: session expiry coverage ----
+
+    function test_SessionExpiry_ValidBeforeExpiry() public {
+        // Create a session that expires at timestamp 2000
+        address expiringKey = address(0xEEEE);
+        vm.prank(owner);
+        validator.createSession(expiringKey, 0.1 ether, 2000);
+
+        // Warp to timestamp 1999 — session should still be valid
+        vm.warp(1999);
+        assertTrue(validator.validateSession(owner, expiringKey, allowedTarget, 0.01 ether));
+        assertTrue(validator.isSessionActive(owner, expiringKey));
+    }
+
+    function test_SessionExpiry_RejectedAfterExpiry() public {
+        // Create a session that expires at timestamp 2000
+        address expiringKey = address(0xEEEE);
+        vm.prank(owner);
+        validator.createSession(expiringKey, 0.1 ether, 2000);
+
+        // Warp to timestamp 2001 — session must be rejected
+        vm.warp(2001);
+        assertFalse(validator.validateSession(owner, expiringKey, allowedTarget, 0.01 ether));
+        assertFalse(validator.isSessionActive(owner, expiringKey));
+    }
+
+    function test_SessionExpiry_ExactBoundary() public {
+        // Create a session that expires at timestamp 2000
+        address expiringKey = address(0xEEEE);
+        vm.prank(owner);
+        validator.createSession(expiringKey, 0.1 ether, 2000);
+
+        // At exactly validUntil (2000), block.timestamp == validUntil, NOT greater
+        // The check is `block.timestamp > s.validUntil`, so timestamp == validUntil is still valid
+        vm.warp(2000);
+        assertTrue(validator.validateSession(owner, expiringKey, allowedTarget, 0.01 ether));
+
+        // One second later, it expires
+        vm.warp(2001);
+        assertFalse(validator.validateSession(owner, expiringKey, allowedTarget, 0.01 ether));
+    }
+
+    function test_SessionExpiry_NoExpiryUnaffected() public {
+        // The default sessionKey from setUp has validUntil = 0 (no expiry)
+        // Even at a very far future timestamp, it should still work
+        vm.warp(999_999_999);
+        assertTrue(validator.validateSession(owner, sessionKey, allowedTarget, 0.01 ether));
+        assertTrue(validator.isSessionActive(owner, sessionKey));
+    }
+
+    function test_SessionExpiry_RecordSpendStillWorksBeforeExpiry() public {
+        address expiringKey = address(0xEEEE);
+        vm.prank(owner);
+        validator.createSession(expiringKey, 0.1 ether, 2000);
+
+        // Before expiry: recording spend should work
+        vm.warp(1500);
+        validator.recordSessionSpend(owner, expiringKey, 0.03 ether);
+        assertEq(validator.getSessionRemainingSpend(owner, expiringKey), 0.07 ether);
+    }
 }

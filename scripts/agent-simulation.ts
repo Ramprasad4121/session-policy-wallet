@@ -83,6 +83,16 @@ const abi = [
     ],
     outputs: [{ name: "", type: "uint256" }],
   },
+  {
+    name: "isSessionActive",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "account", type: "address" },
+      { name: "sessionKey", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
 ] as const;
 
 async function main() {
@@ -216,6 +226,40 @@ async function main() {
     args: [account.address, SESSION_KEY, BLOCKED_TARGET, parseEther("0.01")],
   });
   console.log("  Result:", blocked ? "ALLOWED ✓" : "REJECTED ✗ (Target Not Allowed)");
+
+  // 8. Session expiry demo — create a second session with a short expiry
+  const EXPIRY_SESSION_KEY = "0x2222222222222222222222222222222222222222" as `0x${string}`;
+  const expiryTimestamp = Math.floor(Date.now() / 1000) + 60; // expires in 60 seconds
+  console.log(`\n[8] Creating session with short expiry (60s from now, validUntil=${expiryTimestamp})...`);
+  const p4 = await walletClient.writeContract({
+    address: VALIDATOR_ADDRESS,
+    abi,
+    functionName: "createSession",
+    args: [EXPIRY_SESSION_KEY, parseEther("0.01"), expiryTimestamp],
+    chain: null,
+  });
+  await sendAndWait(p4, "createSession (expiry)");
+
+  // Check the session is active right now (before expiry)
+  const activeNow = await publicClient.readContract({
+    address: VALIDATOR_ADDRESS,
+    abi,
+    functionName: "isSessionActive",
+    args: [account.address, EXPIRY_SESSION_KEY],
+  });
+  console.log("  Session active (before expiry):", activeNow ? "YES ✓" : "NO ✗");
+
+  const validBeforeExpiry = await publicClient.readContract({
+    address: VALIDATOR_ADDRESS,
+    abi,
+    functionName: "validateSession",
+    args: [account.address, EXPIRY_SESSION_KEY, ALLOWED_TARGET, parseEther("0.005")],
+  });
+  console.log("  Validate 0.005 MON (before expiry):", validBeforeExpiry ? "ALLOWED ✓" : "REJECTED ✗");
+
+  console.log(`\n  ℹ This session will expire at Unix timestamp ${expiryTimestamp}.`);
+  console.log("  After that time, validateSession and isSessionActive will return false.");
+  console.log("  (On-chain expiry is enforced by comparing block.timestamp > validUntil)");
 
   // Final remaining spend
   await showRemaining("final");

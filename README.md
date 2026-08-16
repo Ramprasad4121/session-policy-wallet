@@ -5,7 +5,8 @@
 Session Policy Wallet lets you grant temporary keys that can only spend a limited amount and can only interact with approved contracts. Any action outside the defined policy is automatically rejected on-chain.
 
 ---
-> **Note:** This is an MVP built during Monad Blitz Bangalore (16 Aug 2026).  
+> [!IMPORTANT]  
+> This is an MVP built during Monad Blitz Bangalore (16 Aug 2026).  
 > It demonstrates the core idea of on-chain session policies (spend limit + allowlist).  
 > It is not production-ready and is intended as a starting point for further development.
 ---

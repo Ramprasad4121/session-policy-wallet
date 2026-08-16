@@ -196,43 +196,30 @@ export default function Home() {
 
   // Connect Wallet
   const connectWallet = useCallback(async () => {
-    console.log("connectWallet clicked!");
     if (typeof window === "undefined") return;
 
     let ethereum = (window as any).ethereum;
-    console.log("Ethereum provider raw:", ethereum);
 
     if (!ethereum) {
-      console.error("No ethereum provider found on window");
-      log("No Web3 wallet found. Please install MetaMask.", "error");
-      alert("No Ethereum wallet found. Please install MetaMask or Rabby.");
+      log("No Web3 wallet found. Please install MetaMask or Rabby.", "error");
       return;
     }
 
     // Handle multiple injected providers (e.g. Coinbase + MetaMask)
     if (ethereum.providers && ethereum.providers.length > 0) {
       const metaMaskProvider = ethereum.providers.find((p: any) => p.isMetaMask);
-      if (metaMaskProvider) {
-        ethereum = metaMaskProvider;
-        console.log("Selected MetaMask from multiple providers");
-      } else {
-        ethereum = ethereum.providers[0];
-        console.log("Selected first available provider from multiple providers");
-      }
+      ethereum = metaMaskProvider ?? ethereum.providers[0];
     }
 
     setConnecting(true);
     log("Requesting wallet connection...", "info");
 
     try {
-      console.log("Creating temporary wallet client to request addresses...");
       const tempClient = createWalletClient({
         transport: custom(ethereum),
       });
 
-      console.log("Calling walletClient.requestAddresses()...");
       const accounts = await tempClient.requestAddresses();
-      console.log("requestAddresses returned:", accounts);
 
       if (!accounts || accounts.length === 0) {
         throw new Error("No accounts returned by wallet");
@@ -243,26 +230,23 @@ export default function Home() {
       log(`Connected: ${addr}`, "success");
 
       // Non-blocking chain switch
-      switchChain().catch((e) => console.warn("Background chain switch failed:", e));
+      switchChain().catch(() => {});
       
     } catch (e: any) {
-      console.error("Full connection error:", e);
-
       // Fallback for older extensions
       if (e?.message?.toLowerCase?.().includes("not connected") || e?.code === 4900) {
         try {
-          console.log("Attempting legacy ethereum.enable()...");
           log("Attempting legacy connection...", "info");
           const legacyAccounts = await ethereum.enable();
           if (legacyAccounts && legacyAccounts.length > 0) {
             const addr = legacyAccounts[0] as Address;
             setupClients(addr, ethereum);
             log(`Connected: ${addr}`, "success");
-            switchChain().catch((err) => console.warn(err));
+            switchChain().catch(() => {});
             return;
           }
-        } catch (fallbackErr) {
-          console.error("Fallback failed:", fallbackErr);
+        } catch {
+          // Fall through to user-facing error below.
         }
       }
 
@@ -528,6 +512,14 @@ export default function Home() {
     }
   }, [publicClient, account, sessionKeyAddress, log]);
 
+  let nextSection = 1;
+  const policySection = nextSection++;
+  const statusSection = sessionData ? nextSection++ : null;
+  const testsSection = account && sessionKeyAddress ? nextSection++ : null;
+  const networkSection = nextSection++;
+  const auditSection = logs.length > 0 ? nextSection++ : null;
+  const formatSection = (n: number) => String(n).padStart(2, "0");
+
   return (
     <div className="wrapper">
       <header>
@@ -597,7 +589,9 @@ export default function Home() {
         {/* 01. Policy Configuration */}
         <section className="section">
           <div className="section-header">
-            <div className="section-title">01. Policy Configuration</div>
+            <div className="section-title">
+              {formatSection(policySection)}. Policy Configuration
+            </div>
             <button
               onClick={handleFillDemo}
               style={{
@@ -617,8 +611,11 @@ export default function Home() {
             <div className="box">
               <div className="box-title">Target Contract Allowlist</div>
               <div className="form-group">
-                <label className="form-label">Contract Address</label>
+                <label className="form-label" htmlFor="target-address-input">
+                  Contract Address
+                </label>
                 <input
+                  id="target-address-input"
                   className="form-input"
                   placeholder="0x1234567890123456789012345678901234567890"
                   value={targetAddress}
@@ -637,10 +634,11 @@ export default function Home() {
             <div className="box">
               <div className="box-title">Session Key Registration</div>
               <div className="form-group">
-                <label className="form-label">
+                <label className="form-label" htmlFor="session-key-input">
                   Session Key (Agent Address)
                 </label>
                 <input
+                  id="session-key-input"
                   className="form-input"
                   placeholder="0x..."
                   value={sessionKeyAddress}
@@ -649,8 +647,11 @@ export default function Home() {
               </div>
               <div className="flex-row">
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Spend Limit (MON)</label>
+                  <label className="form-label" htmlFor="spend-limit-input">
+                    Spend Limit (MON)
+                  </label>
                   <input
+                    id="spend-limit-input"
                     className="form-input"
                     placeholder="0.05"
                     value={spendLimit}
@@ -658,8 +659,11 @@ export default function Home() {
                   />
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">TTL (Minutes)</label>
+                  <label className="form-label" htmlFor="expiry-minutes-input">
+                    TTL (Minutes)
+                  </label>
                   <input
+                    id="expiry-minutes-input"
                     className="form-input"
                     placeholder="0 = unlimited"
                     value={expiryMinutes}
@@ -689,7 +693,9 @@ export default function Home() {
         {sessionData && (
           <section className="section">
             <div className="section-header">
-              <div className="section-title">02. Active Policy Status</div>
+              <div className="section-title">
+                {formatSection(statusSection!)}. Active Policy Status
+              </div>
               <div className="section-subtitle">
                 Real-time state from PolicyValidator
               </div>
@@ -748,7 +754,9 @@ export default function Home() {
         {account && sessionKeyAddress && (
           <section className="section">
             <div className="section-header">
-              <div className="section-title">03. Policy Execution Tests</div>
+              <div className="section-title">
+                {formatSection(testsSection!)}. Policy Execution Tests
+              </div>
               <div className="section-subtitle">
                 Validate transactions against fail-closed rules
               </div>
@@ -812,7 +820,9 @@ export default function Home() {
         {/* 04. Network Info */}
         <section className="section">
           <div className="section-header">
-            <div className="section-title">04. Network & Protocol Info</div>
+            <div className="section-title">
+              {formatSection(networkSection)}. Network & Protocol Info
+            </div>
             <div className="section-subtitle">
               Monad Testnet Contract Details
             </div>
@@ -845,12 +855,19 @@ export default function Home() {
         {logs.length > 0 && (
           <section className="section">
             <div className="section-header">
-              <div className="section-title">05. Audit Log</div>
+              <div className="section-title">
+                {formatSection(auditSection!)}. Audit Log
+              </div>
               <div className="section-subtitle">
                 Real-time RPC transactions and status changes
               </div>
             </div>
-            <div className="terminal">
+            <div
+              className="terminal"
+              role="log"
+              aria-live="polite"
+              aria-label="Audit log"
+            >
               {logs.map((entry, i) => (
                 <div key={i} className={`terminal-line ${entry.type}`}>
                   <span className="prefix">[{entry.timestamp}]</span>
